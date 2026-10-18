@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111114">
+<title>Night Clock Remote</title>
+<style>
+  :root { color-scheme: dark; --bg:#111114; --card:#1b1b20; --line:#2a2a31; --fg:#ececf0; --dim:#8d8d96; --on:#4d8dff; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.4 system-ui, sans-serif; padding: 16px 16px calc(32px + env(safe-area-inset-bottom)); max-width: 560px; margin-inline: auto; }
+  h1 { font-size: 20px; font-weight: 600; margin: 4px 0 14px; display: flex; align-items: center; gap: 8px; }
+  h1 i { width: 8px; height: 8px; border-radius: 50%; background: #3ddc84; }
+  h1 i.off { background: #ff5c5c; }
+  section { background: var(--card); border-radius: 18px; padding: 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 12px; }
+  h2 { margin: 0; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button { flex: 1 1 auto; padding: 10px 12px; border-radius: 999px; border: 0; background: #ffffff10; color: inherit; font: inherit; }
+  .seg button.on { background: var(--fg); color: #111; font-weight: 600; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .row output { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .sw { appearance: none; width: 48px; height: 28px; border-radius: 14px; background: #ffffff25; position: relative; flex: none; margin: 0; }
+  .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .sw:checked { background: var(--on); }
+  .sw:checked::after { transform: translateX(20px); }
+  input[type=range] { width: 100%; height: 32px; accent-color: var(--fg); }
+  input[type=color] { width: 44px; height: 32px; border: 1px solid #ffffff30; border-radius: 8px; background: none; padding: 0; }
+  .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .presets button { border: 2px solid transparent; border-radius: 12px; background: #ffffff0d; color: inherit; font: inherit; font-size: 12px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .presets button.on { border-color: var(--fg); }
+  .presets span { width: 100%; height: 28px; border-radius: 8px; border: 1px solid; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .presets i { width: 12px; height: 12px; border-radius: 50%; }
+  .np { display: flex; align-items: center; gap: 12px; }
+  .np img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: #ffffff10; }
+  .np .t { flex: 1; min-width: 0; }
+  .np .t b, .np .t small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .np small { color: var(--dim); }
+  .np .ctl { display: flex; gap: 4px; }
+  .np .ctl button { width: 44px; height: 44px; border-radius: 50%; border: 0; background: #ffffff12; color: inherit; font-size: 18px; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+<h1><i id="dot" class="off"></i> Night Clock</h1>
+<div id="app"></div>
+<script>
+(() => {
+  const K = new URLSearchParams(location.search).get("k") || "";
+  const q = (p) => p + "?k=" + encodeURIComponent(K);
+  const app = document.getElementById("app");
+  const dot = document.getElementById("dot");
+  let state = null;     // { version, settings, schema, media }
+  let busy = 0;         // >0 while a slider/colour picker is being dragged
+  let lastVersion = -1;
+  let artSrc = "", artFor = "";
+
+  const get = (o, path) => path.split(".").reduce((a, k) => (a == null ? a : a[k]), o);
+  const el = (tag, props = {}, ...kids) => {
+    const e = Object.assign(document.createElement(tag), props);
+    for (const k of kids.flat()) if (k != null) e.append(k);
+    return e;
+  };
+
+  // --- sending ---------------------------------------------------------
+  let pending = {}, timer = 0;
+  function send(patch) {
+    // optimistic local update + coalesced POST
+    for (const [k, v] of Object.entries(patch)) {
+      if (k === "palette") state.settings.palette = { ...state.settings.palette, ...v };
+      else state.settings[k] = v;
+    }
+    for (const [k, v] of Object.entries(patch)) {
+      if (k === "palette") pending.palette = { ...pending.palette, ...v };
+      else pending[k] = v;
+    }
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const body = pending; pending = {};
+      try { await fetch(q("/api/settings"), { method: "POST", body: JSON.stringify(body) }); } catch {}
+    }, 40);
+  }
+  const setKey = (key, value) => {
+    if (key.startsWith("palette.")) return send({ palette: { [key.slice(8)]: value }, presetId: "custom" });
+    send({ [key]: value });
+  };
+
+  // --- controls --------------------------------------------------------
+  function control(c, s) {
+    const label = c.label;
+    const val = c.key ? get(s, c.key) : undefined;
+    if (c.type === "seg") {
+      const box = el("div", { className: "seg" });
+      for (const o of c.options) {
+        const id = c.numeric ? Number(o.id) : o.id;
+        box.append(el("button", { type: "button", textContent: o.label, className: String(val) === String(id) ? "on" : "", onclick: () => { setKey(c.key, id); render(); } }));
+      }
+      return label ? el("div", {}, el("div", { className: "row", style: "margin-bottom:6px;color:var(--dim)" }, label), box) : box;
+    }
+    if (c.type === "toggle") {
+      return el("label", { className: "row" }, el("span", { textContent: c.label }),
+        el("input", { type: "checkbox", className: "sw", checked: !!val, onchange: (e) => { setKey(c.key, e.target.checked); render(); } }));
+    }
+    if (c.type === "range") {
+      const out = el("output", { textContent: fmt(c, val) });
+      const input = el("input", { type: "range", min: c.min, max: c.max, step: c.step, value: val });
+      input.addEventListener("input", () => { out.textContent = fmt(c, +input.value); setKey(c.key, +input.value); });
+      input.addEventListener("pointerdown", () => busy++);
+      const done = () => { if (busy > 0) busy--; };
+      input.addEventListener("pointerup", done); input.addEventListener("pointercancel", done);
+      return el("label", { style: "display:flex;flex-direction:column;gap:4px" }, el("span", { className: "row" }, el("span", { textContent: c.label }), out), input);
+    }
+    if (c.type === "color") {
+      const input = el("input", { type: "color", value: val });
+      input.addEventListener("input", () => setKey(c.key, input.value));
+      input.addEventListener("focus", () => busy++);
+      input.addEventListener("blur", () => { if (busy > 0) busy--; });
+      return el("label", { className: "row" }, el("span", { textContent: c.label }), input);
+    }
+    if (c.type === "presets") {
+      const box = el("div", { className: "presets" });
+      for (const p of c.options) {
+        box.append(el("button", { type: "button", className: s.presetId === p.id ? "on" : "", onclick: () => { send({ palette: p.palette, presetId: p.id }); render(); } },
+          el("span", { style: `background:${p.palette.bg};border-color:${p.palette.muted}` },
+            el("i", { style: `background:${p.palette.text}` }), el("i", { style: `background:${p.palette.accent}` })),
+          p.label));
+      }
+      return box;
+    }
+    return null;
+  }
+  const fmt = (c, v) => (c.percent ? Math.round(v * 100) + "%" : String(v));
+  const visible = (c, s) => !c.showIf || c.showIf.in.includes(get(s, c.showIf.key));
+
+  function nowPlaying(m) {
+    if (!m) return null;
+    const act = (a) => fetch(q("/api/media/" + a), { method: "POST" }).catch(() => {});
+    return el("section", {}, el("h2", { textContent: "Now playing" }),
+      el("div", { className: "np" },
+        el("img", { src: artSrc || "", alt: "", hidden: !artSrc }),
+        el("div", { className: "t" }, el("b", { textContent: m.title }), el("small", { textContent: [m.artist, m.album].filter(Boolean).join(" · ") })),
+        el("div", { className: "ctl" },
+          el("button", { textContent: "⏮", onclick: () => act("previous") }),
+          el("button", { textContent: m.playing ? "⏸" : "▶", onclick: () => act("play_pause") }),
+          el("button", { textContent: "⏭", onclick: () => act("next") }))));
+  }
+
+  function render() {
+    if (!state) return;
+    const { settings: s, schema, media } = state;
+    const frag = document.createDocumentFragment();
+    const np = nowPlaying(media);
+    if (np) frag.append(np);
+    for (const sec of schema.sections || []) {
+      const controls = sec.controls.filter((c) => visible(c, s)).map((c) => control(c, s));
+      if (!controls.length) continue;
+      frag.append(el("section", {}, el("h2", { textContent: sec.title }), controls));
+    }
+    app.replaceChildren(frag);
+  }
+
+  // --- polling ---------------------------------------------------------
+  async function poll() {
+    try {
+      const r = await fetch(q("/api/state"), { cache: "no-store" });
+      if (r.status === 403) { app.textContent = "Link expired — rescan the QR code on the clock."; dot.className = "off"; return; }
+      const next = await r.json();
+      dot.className = "";
+      if (next.media && next.media.art && artFor !== next.media.title) {
+        artFor = next.media.title;
+        fetch(q("/api/art")).then((r) => r.text()).then((t) => { artSrc = t; render(); }).catch(() => {});
+      } else if (!next.media) { artSrc = ""; artFor = ""; }
+      const mediaKey = JSON.stringify(next.media && [next.media.title, next.media.playing]);
+      const changed = next.version !== lastVersion || mediaKey !== poll.mediaKey;
+      lastVersion = next.version; poll.mediaKey = mediaKey;
+      if (changed && !busy && !Object.keys(pending).length) { state = next; render(); }
+      else if (!state) { state = next; render(); }
+    } catch { dot.className = "off"; }
+  }
+  poll(); setInterval(poll, 1500);
+})();
+</script>
+</body>
+</html>
