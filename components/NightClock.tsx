@@ -85,11 +85,15 @@ export default function NightClock() {
         else lock = l;
       }).catch(() => {});
     const onVisible = () => document.visibilityState === "visible" && request();
+    // Some browsers (iOS Safari) only grant the lock from a user gesture, so retry on touch.
+    const onGesture = () => !lock && request();
     request();
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pointerdown", onGesture);
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pointerdown", onGesture);
       lock?.release().catch(() => {});
     };
   }, [settings.wakeLock]);

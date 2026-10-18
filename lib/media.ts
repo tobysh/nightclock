@@ -27,6 +27,15 @@ export function useCanFullscreen() {
   );
 }
 
+/** Screen Wake Lock API available (needs HTTPS; Chrome/Android, Safari 16.4+). */
+export function useWakeLockSupported() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => "wakeLock" in navigator,
+    () => true,
+  );
+}
+
 /** Currently playing media from the Rust backend; null in a plain browser or when idle. */
 export function useMedia(enabled: boolean): MediaInfo | null {
   const [media, setMedia] = useState<MediaInfo | null>(null);

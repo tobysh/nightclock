@@ -140,3 +140,10 @@ body { touch-action: manipulation; overscroll-behavior: none; -webkit-touch-call
 .nc-gear { top: max(16px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); width: 48px; height: 48px; }
 .sp { padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: max(28px, env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
 .nc-media { bottom: max(3vmin, env(safe-area-inset-bottom)); }
+
+/* keyboard hints only make sense with a keyboard; show a tap tip on touch screens */
+.sp-touch { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  .sp-keys { display: none; }
+  .sp-touch { display: block; }
+}

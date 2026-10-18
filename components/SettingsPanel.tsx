@@ -12,7 +12,7 @@ import {
   type Palette,
   type Settings,
 } from "@/lib/settings";
-import { useCanFullscreen, useIsTauri } from "@/lib/media";
+import { useCanFullscreen, useIsTauri, useWakeLockSupported } from "@/lib/media";
 
 interface Props {
   open: boolean;
@@ -130,6 +130,7 @@ const COLOR_FIELDS: { key: keyof Palette; label: string }[] = [
 export default function SettingsPanel({ open, settings, onChange, onClose, onFullscreen, remoteUrl, locationEstimated }: Props) {
   const inApp = useIsTauri();
   const canFullscreen = useCanFullscreen();
+  const wakeSupported = useWakeLockSupported();
   const [geoMsg, setGeoMsg] = useState<string | null>(null);
   const locate = () => {
     setGeoMsg("Locating…");
@@ -260,7 +261,11 @@ export default function SettingsPanel({ open, settings, onChange, onClose, onFul
         {inApp && <Toggle label="Media controls" checked={settings.mediaControls} onChange={(mediaControls) => onChange({ mediaControls })} />}
         <Toggle label="Smooth sweeping hands" checked={settings.smooth} onChange={(smooth) => onChange({ smooth })} />
         <Toggle label="Burn-in drift (nudge each minute)" checked={settings.drift} onChange={(drift) => onChange({ drift })} />
-        <Toggle label="Keep screen awake" checked={settings.wakeLock} onChange={(wakeLock) => onChange({ wakeLock })} />
+        {wakeSupported ? (
+          <Toggle label="Keep screen awake" checked={settings.wakeLock} onChange={(wakeLock) => onChange({ wakeLock })} />
+        ) : (
+          <p className="sp-hint" style={{ margin: 0 }}>Keep screen awake isn&apos;t supported in this browser. Set your device&apos;s auto-lock to Never instead.</p>
+        )}
       </Section>
 
       {inApp && (
@@ -280,7 +285,8 @@ export default function SettingsPanel({ open, settings, onChange, onClose, onFul
         {canFullscreen && <button type="button" onClick={onFullscreen}>Fullscreen</button>}
         <button type="button" onClick={() => onChange({ ...DEFAULT_SETTINGS })}>Reset all</button>
       </div>
-      <p className="sp-hint">Shortcuts: <kbd>S</kbd> settings · <kbd>F</kbd> fullscreen · <kbd>Esc</kbd> close</p>
+      <p className="sp-hint sp-keys">Shortcuts: <kbd>S</kbd> settings · <kbd>F</kbd> fullscreen · <kbd>Esc</kbd> close</p>
+      <p className="sp-hint sp-touch">Tap the screen to bring back the ⚙ button. Install to your home screen for fullscreen.</p>
     </aside>
   );
 }
