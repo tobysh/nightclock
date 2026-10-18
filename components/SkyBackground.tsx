@@ -47,9 +47,10 @@ export default function SkyBackground({ lat, lon, gradient, stars, bg }: Props) 
       const vis = stars ? nightFactor(alt) : 0;
       if (vis <= 0.01) return;
 
-      // Planisphere view: zenith at the centre, horizon at the edge, north up, east left.
+      // Planisphere view: zenith at the centre, north up, east left. The horizon circle is
+      // pushed past the screen corners so stars fill the whole display, portrait or landscape.
       const jd = toJD(date);
-      const R = Math.hypot(w, h) / 2 * 0.78;
+      const R = (Math.hypot(w, h) / 2) * 1.15;
       const cx = w / 2, cy = h / 2;
       for (const s of getStars()) {
         const { alt: a, az } = altAz(s.ra, s.dec, jd, lat, lon);

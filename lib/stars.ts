@@ -57,7 +57,7 @@ export function getStars(): Star[] {
   if (cache) return cache;
   const stars: Star[] = BRIGHT.map(([, raH, dec, mag]) => ({ ra: raH * 15 * RAD, dec: dec * RAD, mag }));
   const rnd = mulberry32(20261018);
-  for (let i = 0; i < 1100; i++) {
+  for (let i = 0; i < 1800; i++) {
     stars.push({
       ra: rnd() * 2 * Math.PI,
       dec: Math.asin(2 * rnd() - 1),
