@@ -84,12 +84,20 @@ export function sunInfo(date: Date, lat: number, lon: number): SunInfo {
     frac = Math.min(1, Math.max(0, isDay ? (h - 6) / 12 : ((h + 6) % 24) / 12));
   }
 
-  const sameDay = (e: SunEvent) => fromJD(e.t).toDateString() === date.toDateString();
-  const pick = (type: SunEvent["type"]) => {
-    const e = events.find((x) => x.type === type && sameDay(x));
-    return e ? fromJD(e.t) : null;
-  };
-  return { altitude, isDay, frac, sunrise: pick("rise"), sunset: pick("set") };
+  // Report the sunrise/sunset pair of the current sun cycle (sunrise → next sunrise), not the
+  // calendar day, so the times don't flip at midnight while it's still dark.
+  let rise: SunEvent | undefined;
+  let set: SunEvent | undefined;
+  if (prev?.type === "rise") {
+    rise = prev;
+    set = next;
+  } else if (prev?.type === "set") {
+    set = prev;
+    rise = [...events].reverse().find((e) => e.type === "rise" && e.t < prev.t);
+  }
+  const sunrise = rise ? fromJD(rise.t) : null;
+  const sunset = set ? fromJD(set.t) : null;
+  return { altitude, isDay, frac, sunrise, sunset };
 }
 
 /* ---------- location ---------- */
